@@ -1,347 +1,164 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PhotoVault (Email Auth + Trash)</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhotoVault (Email Auth + IndexedDB)</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
   <style>
     .gallery-item { transition: transform 0.2s; }
     .gallery-item:hover { transform: scale(1.03); }
-    .btn-trash { background-color: #ef4444; }
-    .btn-restore { background-color: #22c55e; }
-    .btn-delete { background-color: #dc2626; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
+  <div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">📸 PhotoVault (Email Auth + IndexedDB)</h1><!-- Tabs -->
+<div class="mb-4 flex gap-4">
+  <button id="tab-login" class="px-4 py-2 bg-gray-300 rounded">Login</button>
+  <button id="tab-signup" class="px-4 py-2 bg-gray-200 rounded">Sign Up</button>
+</div>
 
-  <div class="container mx-auto p-4 max-w-4xl">
-    <h1 class="text-2xl font-bold mb-4">📸 PhotoVault (Email Auth + Trash)</h1>
+<!-- Login Form -->
+<form id="login-form" class="mb-4">
+  <input type="email" id="login-email" placeholder="Email" class="block mb-2 p-2 w-full border rounded" required />
+  <input type="password" id="login-password" placeholder="Password" class="block mb-2 p-2 w-full border rounded" required />
+  <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Login</button>
+</form>
 
-    <!-- Tabs -->
-    <div class="mb-4 flex gap-4 flex-wrap">
-      <button id="tab-login" class="px-4 py-2 bg-gray-300 rounded">Login</button>
-      <button id="tab-signup" class="px-4 py-2 bg-gray-200 rounded">Sign Up</button>
-      <button id="tab-gallery" class="px-4 py-2 bg-gray-200 rounded hidden">Gallery</button>
-      <button id="tab-trash" class="px-4 py-2 bg-gray-200 rounded hidden">Trash 🗑️</button>
-    </div>
+<!-- Signup Form -->
+<form id="signup-form" class="mb-4 hidden">
+  <input type="email" id="signup-email" placeholder="Email" class="block mb-2 p-2 w-full border rounded" required />
+  <input type="password" id="signup-password" placeholder="Password" class="block mb-2 p-2 w-full border rounded" required />
+  <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">Sign Up</button>
+</form>
 
-    <!-- Login Form -->
-    <form id="login-form" class="mb-4">
-      <input type="email" id="login-email" placeholder="Email" class="block mb-2 p-2 w-full border rounded" required />
-      <input type="password" id="login-password" placeholder="Password" class="block mb-2 p-2 w-full border rounded" required />
-      <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Login</button>
-    </form>
+<!-- Logout -->
+<button id="logout-button" class="bg-red-500 text-white px-4 py-2 rounded hidden mb-4">Logout</button>
 
-    <!-- Signup Form -->
-    <form id="signup-form" class="mb-4 hidden">
-      <input type="email" id="signup-email" placeholder="Email" class="block mb-2 p-2 w-full border rounded" required />
-      <input type="password" id="signup-password" placeholder="Password" class="block mb-2 p-2 w-full border rounded" required />
-      <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">Sign Up</button>
-    </form>
+<!-- Upload form -->
+<form id="upload-form" class="mb-4 hidden">
+  <input type="file" id="media-upload" multiple accept="image/*,video/*" class="mb-2">
+  <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Upload</button>
+</form>
 
-    <!-- Logout -->
-    <button id="logout-button" class="bg-red-500 text-white px-4 py-2 rounded hidden mb-4">Logout</button>
+<!-- Image gallery -->
+<div id="gallery" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
 
-    <!-- Upload form -->
-    <form id="upload-form" class="mb-4 hidden">
-      <input type="file" id="media-upload" multiple accept="image/*,video/*" class="mb-2" />
-      <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Upload</button>
-    </form>
-
-    <!-- Gallery and Trash -->
-    <div id="gallery" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
-  </div>
-
-  <script>
-    // Firebase config - replace with your own config!
+  </div>  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyABCENXW3VavR_ynfzolN3TChbakSltjRE",
       authDomain: "apollo-save.firebaseapp.com",
       projectId: "apollo-save",
       appId: "1:101571335083:web:ca4a6369ed370e7ec078ee"
     };
-
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
+
+    // IndexedDB setup
+    let db;
+    const request = indexedDB.open("PhotoVaultDB", 1);
+    request.onerror = (e) => console.error("DB error", e);
+    request.onsuccess = (e) => db = e.target.result;
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("media")) {
+        db.createObjectStore("media", { keyPath: "id", autoIncrement: true });
+      }
+    };
+
+    function saveToDB(userId, file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const tx = db.transaction("media", "readwrite");
+        const store = tx.objectStore("media");
+        store.add({ userId, name: file.name, data: reader.result });
+        tx.oncomplete = () => loadUserMedia(userId);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function loadUserMedia(userId) {
+      const gallery = document.getElementById("gallery");
+      gallery.innerHTML = "";
+      const tx = db.transaction("media", "readonly");
+      const store = tx.objectStore("media");
+      const request = store.openCursor();
+      request.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const { userId: uid, name, data } = cursor.value;
+          if (uid === userId) {
+            const el = document.createElement("div");
+            el.className = "gallery-item bg-white p-4 rounded-lg shadow";
+            el.innerHTML = data.includes("video") ?
+              `<video controls class="w-full h-48 mb-2 rounded"><source src="${data}"></video><p class="text-sm truncate">${name}</p>` :
+              `<img src="${data}" class="w-full h-48 object-cover mb-2 rounded"><p class="text-sm truncate">${name}</p>`;
+            gallery.appendChild(el);
+          }
+          cursor.continue();
+        }
+      };
+    }
 
     document.addEventListener("DOMContentLoaded", () => {
       const loginTab = document.getElementById("tab-login");
       const signupTab = document.getElementById("tab-signup");
-      const galleryTab = document.getElementById("tab-gallery");
-      const trashTab = document.getElementById("tab-trash");
-
       const loginForm = document.getElementById("login-form");
       const signupForm = document.getElementById("signup-form");
       const logoutBtn = document.getElementById("logout-button");
       const uploadForm = document.getElementById("upload-form");
       const mediaInput = document.getElementById("media-upload");
-      const gallery = document.getElementById("gallery");
 
-      let currentUser = null;
-      let viewingTrash = false;
-
-      // Helper: switch active tab styling
-      function setActiveTab(tab) {
-        [loginTab, signupTab, galleryTab, trashTab].forEach(t => t.classList.remove("bg-gray-300"));
-        tab.classList.add("bg-gray-300");
-      }
-
-      // Tab Switching
-      loginTab.addEventListener("click", () => {
-        viewingTrash = false;
+      loginTab.onclick = () => {
         loginForm.classList.remove("hidden");
         signupForm.classList.add("hidden");
-        galleryTab.classList.add("hidden");
-        trashTab.classList.add("hidden");
-        uploadForm.classList.add("hidden");
-        logoutBtn.classList.add("hidden");
-        gallery.innerHTML = "";
-        setActiveTab(loginTab);
-      });
-
-      signupTab.addEventListener("click", () => {
-        viewingTrash = false;
+      };
+      signupTab.onclick = () => {
         signupForm.classList.remove("hidden");
         loginForm.classList.add("hidden");
-        galleryTab.classList.add("hidden");
-        trashTab.classList.add("hidden");
-        uploadForm.classList.add("hidden");
-        logoutBtn.classList.add("hidden");
-        gallery.innerHTML = "";
-        setActiveTab(signupTab);
-      });
+      };
 
-      galleryTab.addEventListener("click", () => {
-        if (!currentUser) return;
-        viewingTrash = false;
-        loginForm.classList.add("hidden");
-        signupForm.classList.add("hidden");
-        galleryTab.classList.remove("hidden");
-        trashTab.classList.remove("hidden");
-        uploadForm.classList.remove("hidden");
-        logoutBtn.classList.remove("hidden");
-        setActiveTab(galleryTab);
-        loadUserImages(currentUser.uid);
-      });
-
-      trashTab.addEventListener("click", () => {
-        if (!currentUser) return;
-        viewingTrash = true;
-        loginForm.classList.add("hidden");
-        signupForm.classList.add("hidden");
-        galleryTab.classList.remove("hidden");
-        trashTab.classList.remove("hidden");
-        uploadForm.classList.add("hidden");
-        logoutBtn.classList.remove("hidden");
-        setActiveTab(trashTab);
-        loadTrashImages(currentUser.uid);
-      });
-
-      // Signup handler
-      signupForm.addEventListener("submit", (e) => {
+      signupForm.onsubmit = (e) => {
         e.preventDefault();
-        const email = document.getElementById("signup-email").value;
-        const password = document.getElementById("signup-password").value;
+        const email = signupForm[0].value;
+        const password = signupForm[1].value;
         auth.createUserWithEmailAndPassword(email, password)
-          .then(() => alert("Signed up successfully! Please login."))
+          .then(() => alert("Signed up!"))
           .catch(err => alert("Signup error: " + err.message));
-      });
+      };
 
-      // Login handler
-      loginForm.addEventListener("submit", (e) => {
+      loginForm.onsubmit = (e) => {
         e.preventDefault();
-        const email = document.getElementById("login-email").value;
-        const password = document.getElementById("login-password").value;
+        const email = loginForm[0].value;
+        const password = loginForm[1].value;
         auth.signInWithEmailAndPassword(email, password)
           .catch(err => alert("Login error: " + err.message));
-      });
+      };
 
-      // Logout handler
-      logoutBtn.addEventListener("click", () => {
-        auth.signOut();
-      });
+      logoutBtn.onclick = () => auth.signOut();
 
-      // On auth state change
-      auth.onAuthStateChanged(user => {
-        currentUser = user;
+      uploadForm.onsubmit = (e) => {
+        e.preventDefault();
+        const user = auth.currentUser;
+        if (!user) return alert("Not logged in");
+        Array.from(mediaInput.files).forEach(file => saveToDB(user.uid, file));
+        mediaInput.value = "";
+      };
+
+      auth.onAuthStateChanged((user) => {
         if (user) {
-          // Show gallery and trash tabs
-          galleryTab.classList.remove("hidden");
-          trashTab.classList.remove("hidden");
-          // Default to gallery tab
-          viewingTrash = false;
           loginForm.classList.add("hidden");
           signupForm.classList.add("hidden");
-          uploadForm.classList.remove("hidden");
           logoutBtn.classList.remove("hidden");
-          setActiveTab(galleryTab);
-          loadUserImages(user.uid);
+          uploadForm.classList.remove("hidden");
+          loadUserMedia(user.uid);
         } else {
-          // Logged out
-          galleryTab.classList.add("hidden");
-          trashTab.classList.add("hidden");
-          uploadForm.classList.add("hidden");
           logoutBtn.classList.add("hidden");
-          loginForm.classList.remove("hidden");
-          signupForm.classList.add("hidden");
-          gallery.innerHTML = "";
-          setActiveTab(loginTab);
+          uploadForm.classList.add("hidden");
+          document.getElementById("gallery").innerHTML = "<p class='text-gray-600'>Please log in to view your media vault.</p>";
         }
       });
-
-      // Upload form submit handler
-      uploadForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        if (!currentUser) return alert("You must be logged in to upload.");
-        const files = mediaInput.files;
-        if (!files.length) return alert("Please select files to upload.");
-
-        const userId = currentUser.uid;
-        let images = JSON.parse(localStorage.getItem(`user_${userId}_images`) || "[]");
-
-        let filesProcessed = 0;
-
-        for (const file of files) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            images.push({ url: e.target.result, name: file.name, type: file.type });
-            filesProcessed++;
-            if (filesProcessed === files.length) {
-              localStorage.setItem(`user_${userId}_images`, JSON.stringify(images));
-              mediaInput.value = "";
-              if (!viewingTrash) loadUserImages(userId);
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-
-      // Load user's images/videos gallery
-      function loadUserImages(userId) {
-        gallery.innerHTML = "";
-        const images = JSON.parse(localStorage.getItem(`user_${userId}_images`) || "[]");
-        if (images.length === 0) {
-          gallery.innerHTML = "<p class='text-gray-500'>No images/videos uploaded yet.</p>";
-          return;
-        }
-
-        images.forEach((media, idx) => {
-          const item = document.createElement("div");
-          item.className = "gallery-item bg-white p-4 rounded-lg shadow relative";
-
-          let mediaHtml = "";
-          if (media.type.startsWith("video/")) {
-            mediaHtml = `<video src="${media.url}" controls class="w-full h-48 mb-2 rounded"></video>`;
-          } else {
-            mediaHtml = `<img src="${media.url}" alt="${media.name}" class="w-full h-48 object-cover mb-2 rounded" />`;
-          }
-
-          item.innerHTML = `
-            ${mediaHtml}
-            <p class="text-sm truncate mb-2">${media.name}</p>
-            <button class="btn-trash text-white px-3 py-1 rounded absolute top-2 right-2">Trash</button>
-          `;
-
-          // Trash button
-          item.querySelector(".btn-trash").addEventListener("click", () => {
-            moveToTrash(userId, idx);
-          });
-
-          gallery.appendChild(item);
-        });
-      }
-
-      // Load trash images/videos
-      function loadTrashImages(userId) {
-        gallery.innerHTML = "";
-        const trash = JSON.parse(localStorage.getItem(`user_${userId}_trash`) || "[]");
-        if (trash.length === 0) {
-          gallery.innerHTML = "<p class='text-gray-500'>Trash is empty.</p>";
-          return;
-        }
-
-        trash.forEach((media, idx) => {
-          const item = document.createElement("div");
-          item.className = "gallery-item bg-white p-4 rounded-lg shadow relative";
-
-          let mediaHtml = "";
-          if (media.type.startsWith("video/")) {
-            mediaHtml = `<video src="${media.url}" controls class="w-full h-48 mb-2 rounded"></video>`;
-          } else {
-            mediaHtml = `<img src="${media.url}" alt="${media.name}" class="w-full h-48 object-cover mb-2 rounded" />`;
-          }
-
-          item.innerHTML = `
-            ${mediaHtml}
-            <p class="text-sm truncate mb-2">${media.name}</p>
-            <div class="flex gap-2 absolute top-2 right-2">
-              <button class="btn-restore text-white px-3 py-1 rounded">Restore</button>
-              <button class="btn-delete text-white px-3 py-1 rounded">Delete</button>
-            </div>
-          `;
-
-          // Restore button
-          item.querySelector(".btn-restore").addEventListener("click", () => {
-            restoreFromTrash(userId, idx);
-          });
-
-          // Delete permanently button
-          item.querySelector(".btn-delete").addEventListener("click", () => {
-            deleteFromTrash(userId, idx);
-          });
-
-          gallery.appendChild(item);
-        });
-      }
-
-      // Move image/video to trash
-      function moveToTrash(userId, imageIndex) {
-        let images = JSON.parse(localStorage.getItem(`user_${userId}_images`) || "[]");
-        let trash = JSON.parse(localStorage.getItem(`user_${userId}_trash`) || "[]");
-
-        if (imageIndex < 0 || imageIndex >= images.length) return;
-
-        const removed = images.splice(imageIndex, 1)[0];
-        trash.push(removed);
-
-        localStorage.setItem(`user_${userId}_images`, JSON.stringify(images));
-        localStorage.setItem(`user_${userId}_trash`, JSON.stringify(trash));
-
-        if (!viewingTrash) loadUserImages(userId);
-      }
-
-      // Restore from trash
-      function restoreFromTrash(userId, trashIndex) {
-        let images = JSON.parse(localStorage.getItem(`user_${userId}_images`) || "[]");
-        let trash = JSON.parse(localStorage.getItem(`user_${userId}_trash`) || "[]");
-
-        if (trashIndex < 0 || trashIndex >= trash.length) return;
-
-        const restored = trash.splice(trashIndex, 1)[0];
-        images.push(restored);
-
-        localStorage.setItem(`user_${userId}_images`, JSON.stringify(images));
-        localStorage.setItem(`user_${userId}_trash`, JSON.stringify(trash));
-
-        loadTrashImages(userId);
-      }
-
-      // Delete permanently from trash
-      function deleteFromTrash(userId, trashIndex) {
-        let trash = JSON.parse(localStorage.getItem(`user_${userId}_trash`) || "[]");
-
-        if (trashIndex < 0 || trashIndex >= trash.length) return;
-
-        trash.splice(trashIndex, 1);
-
-        localStorage.setItem(`user_${userId}_trash`, JSON.stringify(trash));
-
-        loadTrashImages(userId);
-      }
     });
-  </script>
-</body>
+  </script></body>
 </html>
